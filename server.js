@@ -82,14 +82,7 @@ const allowedOrigins = (
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests without an Origin header, such as Postman.
-      if (!origin) {
-        return callback(null, true);
-      }
-
-      const normalizedOrigin = origin.replace(/\/$/, "");
-
-      if (allowedOrigins.includes(normalizedOrigin)) {
+      if (!origin || allowedOrigins.includes(origin.replace(/\/$/, ""))) {
         return callback(null, true);
       }
 
@@ -99,6 +92,50 @@ app.use(
 );
 
 app.use(express.json());
+
+// Root route: displays in browser
+app.get("/", (req, res) => {
+  res.status(200).send(`
+    <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>ClientCare API</title>
+        <style>
+          body {
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            font-family: Arial, sans-serif;
+            background: #FAF7F2;
+            color: #292524;
+          }
+          .card {
+            text-align: center;
+            padding: 40px;
+            margin: 20px;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 8px 30px #29252412;
+          }
+          h1 { color: #C2410C; }
+          p { line-height: 1.7; }
+          a { color: #C2410C; }
+        </style>
+      </head>
+      <body>
+        <main class="card">
+          <h1>ClientCare API</h1>
+          <p>Server is running successfully!</p>
+          <p>Backend services are ready.</p>
+          <a href="/api/health">Check API Health</a>
+        </main>
+      </body>
+    </html>
+  `);
+});
 
 // Authentication APIs
 app.use("/api/auth", authRoutes);
@@ -124,16 +161,20 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// Global error handler for CORS and other errors
+// Error handler
 app.use((err, req, res, next) => {
   console.error("Error:", err.message);
 
-  res.status(err.message === "Not allowed by CORS" ? 403 : 500).json({
+  if (err.message === "Not allowed by CORS") {
+    return res.status(403).json({
+      success: false,
+      message: "Origin not allowed",
+    });
+  }
+
+  return res.status(500).json({
     success: false,
-    message:
-      err.message === "Not allowed by CORS"
-        ? "Origin not allowed"
-        : "Internal server error",
+    message: "Internal server error",
   });
 });
 
@@ -143,7 +184,7 @@ const startServer = async () => {
   try {
     await connectDB();
 
-    app.listen(PORT, () => {
+    app.listen(PORT, "0.0.0.0", () => {
       console.log(`ClientCare API running on port ${PORT}`);
     });
   } catch (error) {
