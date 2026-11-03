@@ -67,6 +67,8 @@ import projectRoutes from "./routes/projectRoutes.js";
 import ticketRoutes from "./routes/ticketRoutes.js";
 import activityRoutes from "./routes/activityRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
+import notificationRoutes from "./routes/notificationRoutes.js";
+import chatRoutes from "./routes/chatRoutes.js";
 
 dotenv.config();
 
@@ -152,6 +154,8 @@ app.use("/api/activities", activityRoutes);
 
 // User APIs
 app.use("/api/users", userRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/chat", chatRoutes);
 
 // Health check API
 app.get("/api/health", (req, res) => {

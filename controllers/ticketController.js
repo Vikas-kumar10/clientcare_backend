@@ -4,6 +4,7 @@ import Ticket from "../models/Ticket.js";
 import Project from "../models/Project.js";
 import User from "../models/User.js";
 import { createActivity } from "./activityController.js";
+import { createNotification } from "../utils/createNotification.js";
 
 const validStatuses = [
   "Open",
@@ -76,6 +77,15 @@ export const createTicket = async (req, res) => {
       entityType: "Ticket",
       ticket: ticket._id,
       project: ticket.project,
+    });
+
+    const adminIds = await User.find({ role: "admin" }).distinct("_id");
+    await createNotification({
+      recipients: adminIds,
+      type: "ticket_created",
+      title: "New ticket created",
+      message: `${req.user.name} created ticket: ${ticket.title}`,
+      ticket: ticket._id,
     });
 
     const result = await populateTicket(
@@ -232,6 +242,14 @@ export const assignDeveloper = async (req, res) => {
 
     await ticket.save();
 
+    await createNotification({
+      recipients: [developer._id, ticket.client],
+      type: "ticket_assigned",
+      title: "Ticket assigned",
+      message: `Ticket "${ticket.title}" was assigned to ${developer.name}`,
+      ticket: ticket._id,
+    });
+
     const result = await populateTicket(
       Ticket.findById(ticket._id)
     );
@@ -271,6 +289,9 @@ export const reviewTicket = async (req, res) => {
       return res.status(404).json({ success: false, message: "Ticket not found" });
     }
 
+    const previousDeveloperId = ticket.assignedDeveloper?.toString() || null;
+    const previousStatus = ticket.status;
+
     if (developerId) {
       if (!mongoose.isValidObjectId(developerId)) {
         return res.status(400).json({ success: false, message: "Invalid developer ID" });
@@ -296,6 +317,28 @@ export const reviewTicket = async (req, res) => {
     ticket.status = status;
     ticket.priority = priority;
     await ticket.save();
+
+    const assignmentChanged =
+      previousDeveloperId !== (ticket.assignedDeveloper?.toString() || null);
+    if (assignmentChanged && ticket.assignedDeveloper) {
+      const assignedDeveloper = await User.findById(ticket.assignedDeveloper).select("name");
+      await createNotification({
+        recipients: [ticket.assignedDeveloper, ticket.client],
+        type: "ticket_assigned",
+        title: "Ticket assigned",
+        message: `Ticket "${ticket.title}" was assigned to ${assignedDeveloper?.name || "a developer"}`,
+        ticket: ticket._id,
+      });
+    }
+    if (previousStatus !== status) {
+      await createNotification({
+        recipient: ticket.client,
+        type: "ticket_status_updated",
+        title: "Ticket status updated",
+        message: `Ticket "${ticket.title}" is now ${status}`,
+        ticket: ticket._id,
+      });
+    }
 
     if (developerId) {
       const developer = await User.findById(developerId).select("name");
@@ -413,6 +456,15 @@ export const updateTicketStatus = async (req, res) => {
     ticket.resolvedAt = status === "Resolved" ? new Date() : null;
 
     await ticket.save();
+
+    const adminIds = await User.find({ role: "admin" }).distinct("_id");
+    await createNotification({
+      recipients: [ticket.client, ...adminIds],
+      type: "ticket_status_updated",
+      title: "Ticket status updated",
+      message: `Ticket "${ticket.title}" status changed to ${status}`,
+      ticket: ticket._id,
+    });
 
     await createActivity({
       actor: req.user._id,
